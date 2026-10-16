@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="fire" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="50%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#eab308" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)" stroke="#38bdf8" stroke-width="6" stroke-opacity="0.4"/>
+  
+  <!-- Clock Circle (Deadline) -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#ef4444" stroke-width="12" stroke-dasharray="14 10" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#dc2626" stroke-width="4" opacity="0.4"/>
+  
+  <!-- Clock Hands pointing to 11:59 (Deadline approaching) -->
+  <line x1="256" y1="256" x2="256" y2="120" stroke="#f87171" stroke-width="10" stroke-linecap="round"/>
+  <line x1="256" y1="256" x2="210" y2="135" stroke="#ef4444" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="14" fill="#ef4444"/>
+
+  <!-- Running Figure / Runner Silhouette in Motion -->
+  <g fill="url(#fire)" transform="translate(40, 20)">
+    <!-- Head with sweat drop -->
+    <circle cx="230" cy="190" r="28"/>
+    <!-- Body tilted forward in sprint -->
+    <path d="M 230 220 L 260 280 L 220 350 L 205 340 L 240 280 L 210 235 Z"/>
+    <!-- Left Leg -->
+    <path d="M 260 280 L 310 330 L 350 335 L 348 350 L 300 345 L 250 290 Z"/>
+    <!-- Right Leg kicking back -->
+    <path d="M 220 350 L 170 380 L 130 375 L 135 360 L 170 365 L 210 340 Z"/>
+    <!-- Left Arm pumping -->
+    <path d="M 225 235 L 275 245 L 295 215 L 308 223 L 280 262 L 220 250 Z"/>
+    <!-- Right Arm back with briefcase / laptop -->
+    <path d="M 215 235 L 165 240 L 140 280 L 126 272 L 152 230 L 210 222 Z"/>
+    <!-- Laptop flying behind -->
+    <rect x="90" y="270" width="36" height="24" rx="3" fill="#38bdf8" transform="rotate(-20 108 282)"/>
+  </g>
+</svg>

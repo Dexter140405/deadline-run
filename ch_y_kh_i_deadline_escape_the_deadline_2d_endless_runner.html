@@ -1,0 +1,2264 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>CHẠY KHỎI DEADLINE - Escape the Deadline (2D Endless Runner)</title>
+  <!-- Tailwind CSS qua CDN với phiên bản cụ thể -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0b1120;
+      font-family: 'Inter', sans-serif;
+      color: #f8fafc;
+    }
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Hiệu ứng Glassmorphism văn phòng hiện đại */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    .glass-hud {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+    }
+    /* Hiệu ứng chữ Neon Deadline nhấp nháy */
+    @keyframes neonPulse {
+      0%, 100% {
+        text-shadow: 0 0 10px #ef4444, 0 0 20px #ef4444, 0 0 40px #dc2626;
+        transform: scale(1);
+      }
+      50% {
+        text-shadow: 0 0 5px #f87171, 0 0 12px #ef4444;
+        transform: scale(1.02);
+      }
+    }
+    .neon-deadline-title {
+      animation: neonPulse 1.4s infinite ease-in-out;
+    }
+    /* Hiệu ứng báo động đỏ quanh màn hình khi Deadline tới gần */
+    @keyframes dangerVignette {
+      0%, 100% { opacity: 0.15; }
+      50% { opacity: 0.75; }
+    }
+    .danger-overlay-active {
+      animation: dangerVignette 0.45s infinite ease-in-out;
+      background: radial-gradient(circle, transparent 45%, rgba(220, 38, 38, 0.65) 100%);
+    }
+    /* Hiệu ứng Confuse (Điện thoại TikTok/FB làm xao nhãng) */
+    @keyframes confuseWobble {
+      0%, 100% { filter: hue-rotate(0deg) blur(0px); transform: skewX(0deg); }
+      25% { filter: hue-rotate(45deg) blur(1.2px); transform: skewX(1.2deg); }
+      75% { filter: hue-rotate(-45deg) blur(1.2px); transform: skewX(-1.2deg); }
+    }
+    .canvas-confused {
+      animation: confuseWobble 0.4s infinite ease-in-out;
+    }
+    /* Custom Scrollbar cho modal hướng dẫn trên màn hình nhỏ */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.5);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.4);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="relative w-full h-full select-none overflow-hidden bg-slate-950">
+
+  <!-- ================= CANVAS CHÍNH CỦA GAME ================= -->
+  <div id="gameContainer" class="relative w-full h-full overflow-hidden">
+    <canvas id="gameCanvas" class="block w-full h-full"></canvas>
+
+    <!-- Lớp phủ Vignette đỏ cảnh báo khi Deadline áp sát -->
+    <div id="dangerVignette" class="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 z-10"></div>
+
+    <!-- Banner Cảnh báo Sếp Đi Tuần hoặc Đảo Ngược Phím giữa màn hình -->
+    <div id="centerAlertBanner" class="pointer-events-none absolute top-24 sm:top-28 left-1/2 -translate-x-1/2 z-20 hidden flex-col items-center gap-1 w-11/12 max-w-lg text-center">
+      <div id="bossWarningBox" class="hidden px-4 py-2 rounded-xl bg-amber-500/95 text-slate-950 font-extrabold text-xs sm:text-sm md:text-base tracking-wide shadow-lg border-2 border-yellow-200 animate-bounce">
+        ⚠️ SẾP ĐANG ĐI TUẦN! GIỮ PHÍM CÚI (⬇️) ĐỂ GIẢ VỜ GÕ PHÍM!
+      </div>
+      <div id="confuseWarningBox" class="hidden px-4 py-1.5 rounded-xl bg-fuchsia-600/90 text-white font-bold text-xs sm:text-sm shadow-lg border border-fuchsia-300">
+        📱 LƯỚT TIKTOK QUÁ ĐÀ: ĐANG BỊ ĐẢO NGƯỢC NÚT NHẢY / CÚI!
+      </div>
+    </div>
+
+    <!-- ================= 2. MÀN HÌNH GAMEPLAY HUD ================= -->
+    <header id="gameplayHud" class="hidden absolute top-0 left-0 right-0 z-20 p-2 sm:p-3.5 pointer-events-none">
+      <div class="max-w-6xl mx-auto flex flex-col gap-2">
+        <!-- Hàng trên: Điểm số, Thanh Khoảng Cách Deadline, Tiền thưởng & Nút điều khiển -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          
+          <!-- Khối Điểm Số & Tiền Thưởng -->
+          <div class="glass-hud rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-3 sm:gap-5 pointer-events-auto">
+            <div>
+              <div class="text-[10px] sm:text-xs uppercase tracking-wider text-sky-300 font-semibold">KPI Quãng Đường</div>
+              <div class="font-mono-tech text-base sm:text-xl md:text-2xl font-extrabold text-white flex items-baseline gap-1">
+                <span id="hudScore">0</span>
+                <span class="text-xs text-sky-400 font-normal">m</span>
+              </div>
+            </div>
+            <div class="h-7 w-px bg-slate-700"></div>
+            <div>
+              <div class="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-300 font-semibold">Lương Thưởng</div>
+              <div class="font-mono-tech text-base sm:text-xl md:text-2xl font-extrabold text-emerald-400">
+                $<span id="hudCash">0</span>
+              </div>
+            </div>
+            <div class="hidden md:block h-7 w-px bg-slate-700"></div>
+            <div class="hidden md:block">
+              <div class="text-[10px] sm:text-xs uppercase tracking-wider text-amber-300 font-semibold">Kỷ Lục</div>
+              <div class="font-mono-tech text-sm sm:text-lg font-bold text-amber-400">
+                <span id="hudHighScore">0</span> m
+              </div>
+            </div>
+          </div>
+
+          <!-- Khối Thanh Khoảng Cách giữa Nhân Viên và Deadline -->
+          <div class="glass-hud rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 flex-1 min-w-[200px] max-w-md pointer-events-auto">
+            <div class="flex items-center justify-between text-[11px] sm:text-xs font-bold mb-1">
+              <span class="text-rose-400 flex items-center gap-1">
+                <span class="inline-block w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                ⏰ DEADLINE: <span id="hudDeadlineTimer" class="font-mono-tech text-rose-300">00:30</span>
+              </span>
+              <span id="hudDistanceLabel" class="text-sky-300 font-mono-tech">Khoảng cách: 75%</span>
+            </div>
+            <!-- Thanh Progress Khoảng cách -->
+            <div class="relative w-full h-3.5 bg-slate-900/90 rounded-full overflow-hidden border border-slate-700 p-0.5">
+              <!-- Vùng nguy hiểm bên trái -->
+              <div id="hudDeadlineFill" class="h-full rounded-full transition-all duration-100 bg-gradient-to-r from-red-600 via-amber-500 to-emerald-400" style="width: 75%;"></div>
+              <!-- Icon Deadline và Nhân viên trên thanh -->
+              <div class="absolute inset-0 flex items-center justify-between px-1.5 text-[10px] leading-none pointer-events-none">
+                <span>🔥</span>
+                <span>🏃‍♂️💻</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Khối Nút Âm thanh & Tạm dừng -->
+          <div class="flex items-center gap-1.5 sm:gap-2 pointer-events-auto">
+            <button id="btnMuteHud" type="button" title="Bật/Tắt Âm Thanh" class="glass-hud hover:bg-slate-800/90 active:scale-95 transition rounded-xl px-3 py-2 text-sm sm:text-base font-bold text-sky-200 flex items-center gap-1">
+              <span id="iconMuteHud">🔊</span>
+              <span class="hidden sm:inline text-xs">Âm thanh</span>
+            </button>
+            <button id="btnPauseHud" type="button" title="Tạm dừng (Phím P)" class="glass-hud hover:bg-slate-800/90 active:scale-95 transition rounded-xl px-3 py-2 text-sm sm:text-base font-bold text-amber-200 flex items-center gap-1">
+              <span id="iconPauseHud">⏸️</span>
+              <span class="hidden sm:inline text-xs">Tạm nghỉ</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Hàng dưới: Các trạng thái Power-up / Debuff đang kích hoạt -->
+        <div id="activeEffectsBar" class="flex flex-wrap items-center gap-1.5 min-h-[26px]"></div>
+      </div>
+    </header>
+
+    <!-- ================= ĐIỀU KHIỂN CẢM ỨNG (MOBILE / TABLET & PC CLICK) ================= -->
+    <div id="touchControls" class="hidden absolute bottom-3 left-0 right-0 z-20 px-3 sm:px-6 pointer-events-none flex items-end justify-between gap-4">
+      <!-- Nút Cúi / Giả vờ gõ phím (Bên trái) -->
+      <button id="btnTouchDuck" type="button" class="pointer-events-auto glass-hud active:bg-amber-500/40 hover:bg-slate-800/80 border-2 border-amber-400/50 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 flex items-center gap-2.5 shadow-xl transition transform active:scale-95">
+        <span class="text-2xl sm:text-3xl">⬇️</span>
+        <div class="text-left">
+          <div class="text-xs sm:text-sm font-extrabold text-amber-300 uppercase tracking-wide">Cúi / Gõ Phím</div>
+          <div class="text-[10px] sm:text-xs text-slate-300">Giữ khi gặp Sếp 👨‍💼</div>
+        </div>
+      </button>
+
+      <!-- Chỉ dẫn nhanh giữa màn hình dưới -->
+      <div class="hidden lg:flex glass-hud rounded-xl px-3 py-1.5 text-xs text-slate-300 items-center gap-3">
+        <span><kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-600 text-sky-300 font-mono-tech">Space</kbd> / <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-600 text-sky-300 font-mono-tech">↑</kbd> Nhảy (Nhảy đúp 2x)</span>
+        <span>•</span>
+        <span><kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-600 text-amber-300 font-mono-tech">↓</kbd> Giữ để Cúi / Giả vờ làm việc</span>
+      </div>
+
+      <!-- Nút Nhảy (Bên phải) -->
+      <button id="btnTouchJump" type="button" class="pointer-events-auto glass-hud active:bg-sky-500/40 hover:bg-slate-800/80 border-2 border-sky-400/50 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 flex items-center gap-2.5 shadow-xl transition transform active:scale-95">
+        <div class="text-right">
+          <div class="text-xs sm:text-sm font-extrabold text-sky-300 uppercase tracking-wide">Nhảy Vọt</div>
+          <div class="text-[10px] sm:text-xs text-slate-300">Nhấn 2 lần = Nhảy đúp</div>
+        </div>
+        <span class="text-2xl sm:text-3xl">⬆️</span>
+      </button>
+    </div>
+
+    <!-- ================= 1. MENU CHÍNH (START SCREEN) ================= -->
+    <section id="startScreen" class="absolute inset-0 z-30 flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-950/60 backdrop-blur-sm">
+      <div class="glass-panel rounded-3xl w-full max-w-4xl p-4 sm:p-7 md:p-8 my-auto border border-sky-500/30">
+        
+        <!-- Header Tiêu đề Game -->
+        <div class="text-center mb-5 sm:mb-6">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold uppercase tracking-widest mb-2">
+            <span>🚨 Cảnh báo khẩn cấp từ Phòng Nhân Sự</span>
+          </div>
+          <h1 class="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight text-white neon-deadline-title uppercase">
+            CHẠY KHỎI DEADLINE
+          </h1>
+          <p class="mt-2 text-xs sm:text-sm md:text-base text-sky-200/90 max-w-2xl mx-auto">
+            Ôm chặt laptop, nạp cà phê phin, né bão Email và cúi đầu gõ phím giả vờ chăm chỉ mỗi khi Sếp đi tuần trước khi đồng hồ <span class="text-rose-400 font-mono-tech font-bold">DEADLINE: 00:30</span> nuốt chửng bạn!
+          </p>
+        </div>
+
+        <!-- Bảng Thành Tích Cá Nhân (KPI Hall of Fame) -->
+        <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
+          <div class="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-2.5 sm:p-3.5 text-center">
+            <div class="text-[10px] sm:text-xs uppercase text-amber-300 font-semibold">🏆 Kỷ Lục Chạy Trốn</div>
+            <div class="font-mono-tech text-lg sm:text-2xl font-extrabold text-amber-400 mt-0.5">
+              <span id="menuHighScore">0</span> m
+            </div>
+          </div>
+          <div class="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-2.5 sm:p-3.5 text-center">
+            <div class="text-[10px] sm:text-xs uppercase text-emerald-300 font-semibold">💰 Lương Cao Nhất</div>
+            <div class="font-mono-tech text-lg sm:text-2xl font-extrabold text-emerald-400 mt-0.5">
+              $<span id="menuBestCash">0</span>
+            </div>
+          </div>
+          <div class="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-2.5 sm:p-3.5 text-center">
+            <div class="text-[10px] sm:text-xs uppercase text-sky-300 font-semibold">👨‍💼 Qua Mặt Sếp</div>
+            <div class="font-mono-tech text-lg sm:text-2xl font-extrabold text-sky-400 mt-0.5">
+              <span id="menuBossDodges">0</span> lần
+            </div>
+          </div>
+        </div>
+
+        <!-- Hướng dẫn Vật phẩm & Chướng ngại vật trực quan -->
+        <div class="mb-5">
+          <div class="flex items-center justify-between mb-2.5">
+            <h2 class="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
+              <span>📋 Cẩm Nang Sinh Tồn Nơi Công Sở</span>
+            </h2>
+            <span class="text-[11px] text-slate-400">PC: Space/↑ Nhảy • ↓ Cúi | Mobile: Nút cảm ứng</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+            <!-- 1. Cà phê -->
+            <div class="bg-slate-900/75 border border-emerald-500/30 rounded-xl p-2.5 flex items-start gap-2.5">
+              <span class="text-2xl leading-none">☕</span>
+              <div>
+                <div class="font-bold text-emerald-300">Cà Phê Phin / Highland</div>
+                <p class="text-slate-300 text-[11px] leading-snug">+50% tốc độ chạy trong 3s, đẩy lùi Deadline & tạo bóng mờ Afterimage.</p>
+              </div>
+            </div>
+            <!-- 2. Tiền lương -->
+            <div class="bg-slate-900/75 border border-amber-500/30 rounded-xl p-2.5 flex items-start gap-2.5">
+              <span class="text-2xl leading-none">💰</span>
+              <div>
+                <div class="font-bold text-amber-300">Tiền Lương & Thưởng Nóng</div>
+                <p class="text-slate-300 text-[11px] leading-snug">Cộng ngay +500 điểm KPI & +$500 tiền mặt kèm mưa tiền lấp lánh.</p>
+              </div>
+            </div>
+            <!-- 3. Mèo văn phòng -->
+            <div class="bg-slate-900/75 border border-sky-500/30 rounded-xl p-2.5 flex items-start gap-2.5">
+              <span class="text-2xl leading-none">🐱</span>
+              <div>
+                <div class="font-bold text-sky-300">Mèo Văn Phòng</div>
+                <p class="text-slate-300 text-[11px] leading-snug">Tạo Khiên Bảo Vệ (Shield) giúp đỡ 1 lần va chạm với Email hoặc Buồn ngủ.</p>
+              </div>
+            </div>
+            <!-- 4. Sếp đi tuần -->
+            <div class="bg-rose-950/50 border border-rose-500/50 rounded-xl p-2.5 flex items-start gap-2.5">
+              <span class="text-2xl leading-none">👨‍💼</span>
+              <div>
+                <div class="font-bold text-rose-300">Sếp Đi Tuần (Nguy Hiểm!)</div>
+                <p class="text-slate-200 text-[11px] leading-snug">BẮT BUỘC nhấn giữ <strong class="text-amber-300">CÚI (⬇️)</strong> để giả vờ gõ phím. Không cúi = Bị mắng 1.5s & Game Over!</p>
+              </div>
+            </div>
+            <!-- 5. Email dồn dập -->
+            <div class="bg-slate-900/75 border border-orange-500/30 rounded-xl p-2.5 flex items-start gap-2.5">
+              <span class="text-2xl leading-none">📧</span>
+              <div>
+                <div class="font-bold text-orange-300">Bão Email (+99 Unread)</div>
+                <p class="text-slate-300 text-[11px] leading-snug">Làm chậm 30% tốc độ trong 2s khiến Deadline áp sát. Hãy nhảy qua!</p>
+              </div>
+            </div>
+            <!-- 6. Điện thoại & 7. Cơn buồn ngủ -->
+            <div class="bg-slate-900/75 border border-fuchsia-500/30 rounded-xl p-2.5 flex items-start gap-2.5">
+              <span class="text-2xl leading-none">📱😴</span>
+              <div>
+                <div class="font-bold text-fuchsia-300">Điện Thoại & Mây Zzz</div>
+                <p class="text-slate-300 text-[11px] leading-snug">📱 TikTok làm đảo ngược phím 2.5s. 😴 Mây Zzz gây gật gù tụt khoảng cách nhanh!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nút Hành Động Bắt Đầu -->
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button id="btnStartGame" type="button" class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-black text-base sm:text-lg tracking-wide shadow-lg shadow-sky-500/30 transform hover:-translate-y-0.5 active:translate-y-0 transition flex items-center justify-center gap-2.5">
+            <span>🚀 VÀO CA CÀY DEADLINE</span>
+          </button>
+          <button id="btnToggleMuteMenu" type="button" class="w-full sm:w-auto px-5 py-4 rounded-2xl bg-slate-800/90 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold text-sm transition flex items-center justify-center gap-2">
+            <span id="iconMuteMenu">🔊</span>
+            <span id="textMuteMenu">Âm thanh: BẬT</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= MÀN HÌNH TẠM DỪNG (PAUSE MODAL) ================= -->
+    <section id="pauseScreen" class="hidden absolute inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+      <div class="glass-panel rounded-3xl w-full max-w-md p-6 text-center border border-amber-400/40">
+        <div class="text-4xl mb-2">☕⏸️</div>
+        <h2 class="text-2xl font-black text-white uppercase">Giải Lao Giữa Giờ</h2>
+        <p class="text-xs sm:text-sm text-slate-300 mt-1 mb-6">
+          Deadline vẫn đang đợi bạn ngoài hành lang... Đừng nghỉ lâu quá nhé!
+        </p>
+        <div class="flex flex-col gap-3">
+          <button id="btnResumeGame" type="button" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold text-base shadow-lg transition">
+            ▶️ Tiếp Tục Chạy Deadline
+          </button>
+          <button id="btnRestartFromPause" type="button" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold text-sm transition">
+            🔄 Chơi Lại Ca Mới
+          </button>
+          <button id="btnMenuFromPause" type="button" class="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 font-semibold text-sm transition">
+            🏠 Về Menu Chính
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 3. MÀN HÌNH GAME OVER ================= -->
+    <section id="gameOverScreen" class="hidden absolute inset-0 z-30 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+      <div class="glass-panel rounded-3xl w-full max-w-lg p-5 sm:p-7 text-center border-2 border-rose-500/50 my-auto">
+        
+        <!-- Icon & Huy hiệu kỷ lục mới -->
+        <div id="newRecordBadge" class="hidden inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 text-xs font-extrabold uppercase tracking-wider mb-2 animate-bounce">
+          🏆 KỶ LỤC KPI MỚI ĐƯỢC THIẾT LẬP!
+        </div>
+
+        <div id="gameOverEmoji" class="text-5xl sm:text-6xl mb-2">💥⏰</div>
+        <h2 class="text-2xl sm:text-3xl font-black text-rose-400 uppercase tracking-tight">
+          CA LÀM VIỆC TOANG RỒI!
+        </h2>
+        <!-- Dòng chữ hài hước theo nguyên nhân thua -->
+        <p id="gameOverReason" class="mt-1.5 text-sm sm:text-base font-bold text-white bg-rose-950/70 border border-rose-500/40 rounded-xl py-2 px-3">
+          "Bạn đã bị Deadline đè bẹp!"
+        </p>
+        <p id="gameOverSubtext" class="mt-1.5 text-xs text-slate-300">
+          Đồng hồ điểm 00:00 và đống task vẫn còn nguyên trên màn hình laptop...
+        </p>
+
+        <!-- Bảng thống kê kết quả trận đấu -->
+        <div class="grid grid-cols-2 gap-2.5 my-5 text-left">
+          <div class="bg-slate-900/85 border border-slate-700 rounded-2xl p-3">
+            <div class="text-[11px] text-slate-400 uppercase font-semibold">Điểm KPI Đạt Được</div>
+            <div class="font-mono-tech text-xl sm:text-2xl font-black text-sky-400 mt-0.5">
+              <span id="goScore">0</span> <span class="text-xs font-normal">m</span>
+            </div>
+          </div>
+          <div class="bg-slate-900/85 border border-slate-700 rounded-2xl p-3">
+            <div class="text-[11px] text-slate-400 uppercase font-semibold">Kỷ Lục Cao Nhất</div>
+            <div class="font-mono-tech text-xl sm:text-2xl font-black text-amber-400 mt-0.5">
+              <span id="goHighScore">0</span> <span class="text-xs font-normal">m</span>
+            </div>
+          </div>
+          <div class="bg-slate-900/85 border border-slate-700 rounded-2xl p-3">
+            <div class="text-[11px] text-slate-400 uppercase font-semibold">Lương Nhặt Được</div>
+            <div class="font-mono-tech text-lg sm:text-xl font-extrabold text-emerald-400 mt-0.5">
+              $<span id="goCash">0</span>
+            </div>
+          </div>
+          <div class="bg-slate-900/85 border border-slate-700 rounded-2xl p-3">
+            <div class="text-[11px] text-slate-400 uppercase font-semibold">Qua Mặt Sếp</div>
+            <div class="font-mono-tech text-lg sm:text-xl font-extrabold text-purple-400 mt-0.5">
+              <span id="goBossDodges">0</span> lần
+            </div>
+          </div>
+        </div>
+
+        <!-- Nút Chơi Lại & Về Menu -->
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button id="btnRetryGame" type="button" class="flex-1 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-slate-950 font-black text-sm sm:text-base shadow-lg shadow-rose-500/30 transition transform hover:-translate-y-0.5 active:translate-y-0">
+            🔄 Chơi lại (Săn KPI mới)
+          </button>
+          <button id="btnBackToMenu" type="button" class="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold text-sm transition">
+            🏠 Menu Chính
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ================= 4 & 5. TOÀN BỘ LOGIC GAME & WEB AUDIO API ================= -->
+  <script>
+    /**
+     * ============================================================================
+     * 1. HỆ THỐNG ÂM THANH TỰ ĐỘNG (WEB AUDIO API SYNTHESIZER)
+     * Tự tổng hợp toàn bộ hiệu ứng âm thanh (không dùng file mp3 ngoài)
+     * ============================================================================
+     */
+    class SoundManager {
+      constructor() {
+        this.ctx = null;
+        this.isMuted = false;
+        this.lastStepTime = 0;
+        this.lastClackTime = 0;
+        this.lastAlarmTime = 0;
+      }
+
+      // Khởi tạo AudioContext sau tương tác đầu tiên của người chơi
+      init() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) {
+            this.ctx = new AudioCtx();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      toggleMute() {
+        this.isMuted = !this.isMuted;
+        return this.isMuted;
+      }
+
+      // Tiếng bước chân chạy dồn dập trên hành lang văn phòng
+      playFootstep(speedRatio = 1) {
+        if (this.isMuted || !this.ctx) return;
+        const now = performance.now();
+        const interval = Math.max(130, 240 / speedRatio);
+        if (now - this.lastStepTime < interval) return;
+        this.lastStepTime = now;
+
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(115, t);
+        osc.frequency.exponentialRampToValueAtTime(42, t + 0.055);
+
+        gain.gain.setValueAtTime(0.09, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.065);
+      }
+
+      // Tiếng nhảy vọt
+      playJump(isDouble = false) {
+        if (this.isMuted || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        const baseFreq = isDouble ? 360 : 260;
+        osc.frequency.setValueAtTime(baseFreq, t);
+        osc.frequency.exponentialRampToValueAtTime(baseFreq * 2.1, t + 0.16);
+
+        gain.gain.setValueAtTime(0.16, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.17);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.18);
+      }
+
+      // Tiếng "Ting!" ngọt ngào khi ăn Cà phê hoặc Tiền lương
+      playTing(type = 'coffee') {
+        if (this.isMuted || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        const notes = type === 'cash' ? [587.33, 880, 1174.66] : [523.25, 659.25, 1046.5];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          const start = t + idx * 0.055;
+          osc.frequency.setValueAtTime(freq, start);
+
+          gain.gain.setValueAtTime(0.18, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + 0.28);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(start);
+          osc.stop(start + 0.29);
+        });
+      }
+
+      // Tiếng nhận Khiên Mèo (Meow synth)
+      playCatShield() {
+        if (this.isMuted || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(440, t);
+        osc.frequency.exponentialRampToValueAtTime(780, t + 0.12);
+        osc.frequency.exponentialRampToValueAtTime(520, t + 0.28);
+
+        gain.gain.setValueAtTime(0.18, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.31);
+      }
+
+      // Tiếng "Cạch cạch cạch" gõ bàn phím cơ điên cuồng khi Giả vờ làm việc trước mặt Sếp
+      playKeyboardClack() {
+        if (this.isMuted || !this.ctx) return;
+        const now = performance.now();
+        if (now - this.lastClackTime < 75) return;
+        this.lastClackTime = now;
+
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        // Tần số ngẫu nhiên nhẹ giống tiếng switch bàn phím cơ Blue/Brown
+        const randomPitch = 800 + Math.random() * 650;
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(randomPitch, t);
+        osc.frequency.exponentialRampToValueAtTime(220, t + 0.025);
+
+        gain.gain.setValueAtTime(0.11, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.032);
+      }
+
+      // Tiếng va chạm Debuff (Email, Điện thoại, Buồn ngủ)
+      playDebuff() {
+        if (this.isMuted || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(240, t);
+        osc.frequency.linearRampToValueAtTime(110, t + 0.22);
+
+        gain.gain.setValueAtTime(0.15, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.25);
+      }
+
+      // Tiếng còi báo động "Bíp... bíp..." dồn dập khi Deadline tiến lại quá gần
+      playAlarmBeep(urgency = 1) {
+        if (this.isMuted || !this.ctx) return;
+        const now = performance.now();
+        const cooldown = urgency > 1.5 ? 280 : 450;
+        if (now - this.lastAlarmTime < cooldown) return;
+        this.lastAlarmTime = now;
+
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(880, t);
+        osc.frequency.setValueAtTime(660, t + 0.06);
+
+        gain.gain.setValueAtTime(0.09, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.14);
+      }
+
+      // Tiếng Sếp quát khi bắt quả tang không cúi làm việc
+      playBossAngry() {
+        if (this.isMuted || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        [180, 145, 115].forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          const start = t + i * 0.11;
+          osc.frequency.setValueAtTime(freq, start);
+          gain.gain.setValueAtTime(0.22, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + 0.1);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(start);
+          osc.stop(start + 0.11);
+        });
+      }
+
+      // Tiếng "Game Over" buồn thảm khi bị Deadline nuốt chửng
+      playGameOver() {
+        if (this.isMuted || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        const notes = [
+          { freq: 392.0, dur: 0.22, delay: 0.0 },
+          { freq: 369.99, dur: 0.22, delay: 0.24 },
+          { freq: 349.23, dur: 0.22, delay: 0.48 },
+          { freq: 311.13, dur: 0.65, delay: 0.72 }
+        ];
+        notes.forEach((n) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          const start = t + n.delay;
+          osc.frequency.setValueAtTime(n.freq, start);
+          if (n.dur > 0.4) {
+            osc.frequency.exponentialRampToValueAtTime(n.freq * 0.78, start + n.dur);
+          }
+          gain.gain.setValueAtTime(0.22, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + n.dur);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(start);
+          osc.stop(start + n.dur + 0.02);
+        });
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 2. LƯU TRỮ KỶ LỤC AN TOÀN VỚI LOCALSTORAGE
+     * ============================================================================
+     */
+    const STORAGE_KEY = 'chay_khoi_deadline_stats_v1';
+    function loadStats() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          return {
+            highScore: Number(parsed.highScore) || 0,
+            bestCash: Number(parsed.bestCash) || 0,
+            bossDodges: Number(parsed.bossDodges) || 0
+          };
+        }
+      } catch (e) {
+        // Bỏ qua nếu trình duyệt chặn localStorage trong iframe
+      }
+      return { highScore: 0, bestCash: 0, bossDodges: 0 };
+    }
+
+    function saveStats(stats) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
+      } catch (e) {
+        // Không làm gián đoạn game nếu localStorage bị giới hạn
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 3. CẤU HÌNH VẬT PHẨM & CHƯỚNG NGẠI VẬT (7 LOẠI THEO ĐỀ BÀI)
+     * ============================================================================
+     */
+    const ITEM_TYPES = {
+      COFFEE: {
+        id: 'COFFEE',
+        emoji: '☕',
+        label: 'Cà Phê Phin',
+        badge: '+50% TỐC ĐỘ',
+        color: '#10b981',
+        glow: '#34d399',
+        isGood: true,
+        radius: 26
+      },
+      EMAIL: {
+        id: 'EMAIL',
+        emoji: '📧',
+        label: 'Bão Email',
+        badge: 'UNREAD +99',
+        color: '#f97316',
+        glow: '#fb923c',
+        isGood: false,
+        radius: 27
+      },
+      BOSS: {
+        id: 'BOSS',
+        emoji: '👨‍💼',
+        label: 'Sếp Đi Tuần',
+        badge: 'ẤN CÚI (⬇️) GÕ PHÍM!',
+        color: '#ef4444',
+        glow: '#f87171',
+        isGood: false,
+        radius: 38
+      },
+      CAT: {
+        id: 'CAT',
+        emoji: '🐱',
+        label: 'Mèo Văn Phòng',
+        badge: 'KHIÊN BẢO VỆ',
+        color: '#38bdf8',
+        glow: '#7dd3fc',
+        isGood: true,
+        radius: 26
+      },
+      PHONE: {
+        id: 'PHONE',
+        emoji: '📱',
+        label: 'TikTok / FB',
+        badge: 'XAO NHÃNG!',
+        color: '#d946ef',
+        glow: '#e879f9',
+        isGood: false,
+        radius: 26
+      },
+      SALARY: {
+        id: 'SALARY',
+        emoji: '💰',
+        label: 'Tiền Lương',
+        badge: '+500 KPI & $',
+        color: '#eab308',
+        glow: '#facc15',
+        isGood: true,
+        radius: 26
+      },
+      SLEEP: {
+        id: 'SLEEP',
+        emoji: '😴',
+        label: 'Cơn Buồn Ngủ',
+        badge: 'MÂY Zzz...',
+        color: '#8b5cf6',
+        glow: '#a78bfa',
+        isGood: false,
+        radius: 28
+      }
+    };
+
+    /**
+     * ============================================================================
+     * 4. ENGINE GAME CHÍNH (CANVAS 2D + PARALLAX + VẬT LÝ 60 FPS)
+     * ============================================================================
+     */
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const sound = new SoundManager();
+    let savedStats = loadStats();
+
+    // Các phần tử DOM UI
+    const startScreen = document.getElementById('startScreen');
+    const pauseScreen = document.getElementById('pauseScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const gameplayHud = document.getElementById('gameplayHud');
+    const touchControls = document.getElementById('touchControls');
+    const dangerVignette = document.getElementById('dangerVignette');
+    const centerAlertBanner = document.getElementById('centerAlertBanner');
+    const bossWarningBox = document.getElementById('bossWarningBox');
+    const confuseWarningBox = document.getElementById('confuseWarningBox');
+    const activeEffectsBar = document.getElementById('activeEffectsBar');
+
+    // DOM số liệu
+    const hudScore = document.getElementById('hudScore');
+    const hudCash = document.getElementById('hudCash');
+    const hudHighScore = document.getElementById('hudHighScore');
+    const hudDeadlineTimer = document.getElementById('hudDeadlineTimer');
+    const hudDistanceLabel = document.getElementById('hudDistanceLabel');
+    const hudDeadlineFill = document.getElementById('hudDeadlineFill');
+
+    const menuHighScore = document.getElementById('menuHighScore');
+    const menuBestCash = document.getElementById('menuBestCash');
+    const menuBossDodges = document.getElementById('menuBossDodges');
+
+    const goScore = document.getElementById('goScore');
+    const goHighScore = document.getElementById('goHighScore');
+    const goCash = document.getElementById('goCash');
+    const goBossDodges = document.getElementById('goBossDodges');
+    const gameOverReason = document.getElementById('gameOverReason');
+    const gameOverSubtext = document.getElementById('gameOverSubtext');
+    const gameOverEmoji = document.getElementById('gameOverEmoji');
+    const newRecordBadge = document.getElementById('newRecordBadge');
+
+    // Trạng thái toàn cục của Game
+    let gameState = 'MENU'; // 'MENU' | 'PLAYING' | 'PAUSED' | 'GAMEOVER'
+    let animFrameId = null;
+    let lastTimestamp = 0;
+
+    // Kích thước Canvas & Mặt đất
+    let viewW = window.innerWidth;
+    let viewH = window.innerHeight;
+    let groundY = viewH - 110;
+
+    // Dữ liệu phiên chơi hiện tại
+    let session = null;
+
+    // Khởi tạo dữ liệu mặc định cho cảnh nền Parallax văn phòng
+    const parallax = {
+      cityBuildings: [],
+      officeProps: [],
+      ceilingLights: [],
+      floorTilesOffset: 0
+    };
+
+    function initParallaxScene() {
+      parallax.cityBuildings = [];
+      for (let i = 0; i < 14; i++) {
+        parallax.cityBuildings.push({
+          x: i * 160,
+          w: 95 + (i % 3) * 35,
+          h: 140 + ((i * 47) % 130),
+          windows: 3 + (i % 3)
+        });
+      }
+
+      parallax.officeProps = [];
+      const propTypes = ['DESK', 'COOLER', 'BOARD', 'PLANT', 'PRINTER'];
+      for (let i = 0; i < 9; i++) {
+        parallax.officeProps.push({
+          x: i * 260 + 80,
+          type: propTypes[i % propTypes.length]
+        });
+      }
+
+      parallax.ceilingLights = [];
+      for (let i = 0; i < 8; i++) {
+        parallax.ceilingLights.push({
+          x: i * 240 + 60
+        });
+      }
+    }
+
+    // Tạo mới trạng thái một ca chạy Deadline
+    function createNewSession() {
+      const playerBaseX = Math.min(Math.max(viewW * 0.34, 210), 420);
+      return {
+        distanceMeters: 0,
+        bonusPoints: 0,
+        totalScore: 0,
+        cash: 0,
+        bossDodgesThisRun: 0,
+        baseSpeed: 390, // pixels / giây
+        currentSpeed: 390,
+        maxSpeed: 760,
+        elapsedTime: 0,
+
+        // Khoảng cách từ Deadline tới Nhân viên: 0% (Deadline tóm được) -> 100% (An toàn tối đa)
+        deadlineGap: 78,
+        lastHitReason: 'DEADLINE', // 'DEADLINE' | 'BOSS' | 'EMAIL' | 'SLEEP'
+
+        // Trạng thái Nhân viên văn phòng
+        player: {
+          x: playerBaseX,
+          y: groundY,
+          vy: 0,
+          width: 54,
+          height: 82,
+          duckHeight: 48,
+          isJumping: false,
+          jumpCount: 0,
+          maxJumps: 2,
+          isDucking: false,
+          hasCatShield: false,
+          runAnimPhase: 0,
+          afterimages: [], // Lưu bóng mờ khi uống Cà phê
+          typingParticles: []
+        },
+
+        // Bộ đếm thời gian các hiệu ứng (tính bằng giây)
+        effects: {
+          coffeeTimer: 0,      // ☕ +50% tốc độ trong 3s
+          emailSlowTimer: 0,   // 📧 -30% tốc độ trong 2s + hiện Unread +99
+          confuseTimer: 0,     // 📱 Đảo ngược nút điều khiển trong 2.5s
+          sleepTimer: 0,       // 😴 Gật gù chậm dần & Deadline thu hẹp trong 2.5s
+          bossStunTimer: 0     // 👨‍💼 Bị Sếp giữ lại mắng 1.5s -> Deadline lao tới
+        },
+
+        // Danh sách vật phẩm/chướng ngại vật, chữ bay (Floating Text) và Hạt (Particles)
+        entities: [],
+        floatingTexts: [],
+        particles: [],
+        spawnCooldown: 1.1,
+        bossSpawnCounter: 0
+      };
+    }
+
+    // Cập nhật kích thước Canvas theo khung nhìn
+    function resizeCanvas() {
+      viewW = window.innerWidth;
+      viewH = window.innerHeight;
+      canvas.width = viewW;
+      canvas.height = viewH;
+      // Chừa khoảng trống bên dưới cho nút cảm ứng trên mobile
+      const bottomMargin = viewW < 640 ? 128 : 108;
+      groundY = Math.max(260, viewH - bottomMargin);
+
+      if (session && session.player) {
+        session.player.x = Math.min(Math.max(viewW * 0.34, 175), 420);
+        if (!session.player.isJumping) {
+          session.player.y = groundY;
+        }
+      }
+      renderFrame();
+    }
+
+    /**
+     * ============================================================================
+     * 5. ĐIỀU KHIỂN NHÂN VẬT (NHẢY & CÚI / GIẢ VỜ GÕ BÀN PHÍM)
+     * ============================================================================
+     */
+    function triggerJumpAction() {
+      if (gameState !== 'PLAYING' || !session) return;
+      if (session.effects.bossStunTimer > 0) return; // Đang bị Sếp mắng không thể cử động
+
+      const p = session.player;
+      // Bỏ cúi nếu đang cúi
+      p.isDucking = false;
+
+      if (p.jumpCount < p.maxJumps) {
+        const isDouble = p.jumpCount > 0;
+        p.vy = isDouble ? -640 : -720;
+        p.isJumping = true;
+        p.jumpCount++;
+        sound.playJump(isDouble);
+
+        // Tạo hạt bụi dưới chân khi nhảy
+        spawnBurstParticles(p.x, p.y, isDouble ? '#38bdf8' : '#cbd5e1', 8);
+        if (isDouble) {
+          addFloatingText('NHẢY ĐÚP!', p.x, p.y - 70, '#38bdf8', 14);
+        }
+      }
+    }
+
+    function setDuckState(active) {
+      if (gameState !== 'PLAYING' || !session) return;
+      if (session.effects.bossStunTimer > 0) return;
+
+      const p = session.player;
+      p.isDucking = active;
+      // Nếu đang nhảy trên không mà bấm Cúi -> lao nhanh xuống sàn
+      if (active && p.isJumping && p.vy < 450) {
+        p.vy = 680;
+      }
+    }
+
+    // Xử lý thao tác người dùng có tính đến hiệu ứng Confuse (📱 đảo ngược phím Nhảy/Cúi)
+    function handleInputJumpPress() {
+      sound.init();
+      if (!session) return;
+      if (session.effects.confuseTimer > 0) {
+        // Bị đảo ngược: Nhấn Nhảy thành Cúi
+        setDuckState(true);
+      } else {
+        triggerJumpAction();
+      }
+    }
+
+    function handleInputJumpRelease() {
+      if (!session) return;
+      if (session.effects.confuseTimer > 0) {
+        setDuckState(false);
+      }
+    }
+
+    function handleInputDuckPress() {
+      sound.init();
+      if (!session) return;
+      if (session.effects.confuseTimer > 0) {
+        // Bị đảo ngược: Nhấn Cúi thành Nhảy
+        triggerJumpAction();
+      } else {
+        setDuckState(true);
+      }
+    }
+
+    function handleInputDuckRelease() {
+      if (!session) return;
+      if (session.effects.confuseTimer <= 0) {
+        setDuckState(false);
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 6. HỆ THỐNG SINH VẬT PHẨM & CHƯỚNG NGẠI VẬT NGẪU NHIÊN
+     * ============================================================================
+     */
+    function spawnNextEntity() {
+      if (!session) return;
+      session.bossSpawnCounter++;
+
+      // Xác suất xuất hiện các loại vật phẩm & chướng ngại vật
+      let chosenType = null;
+      const roll = Math.random();
+
+      // Cứ mỗi 5-7 lượt hoặc ngẫu nhiên 16% sẽ xuất hiện Sếp đi tuần (nếu trên màn hình chưa có Sếp)
+      const hasBossOnScreen = session.entities.some(e => e.type.id === 'BOSS');
+      if (!hasBossOnScreen && (session.bossSpawnCounter >= 6 || roll < 0.16)) {
+        chosenType = ITEM_TYPES.BOSS;
+        session.bossSpawnCounter = 0;
+      } else if (roll < 0.34) {
+        chosenType = ITEM_TYPES.EMAIL;
+      } else if (roll < 0.50) {
+        chosenType = ITEM_TYPES.COFFEE;
+      } else if (roll < 0.66) {
+        chosenType = ITEM_TYPES.SALARY;
+      } else if (roll < 0.79) {
+        chosenType = ITEM_TYPES.SLEEP;
+      } else if (roll < 0.90) {
+        chosenType = ITEM_TYPES.PHONE;
+      } else {
+        chosenType = ITEM_TYPES.CAT;
+      }
+
+      // Tính toán độ cao Y của vật phẩm/chướng ngại vật
+      let entityY = groundY - 34; // Mặc định ở dưới đất (có thể nhảy qua)
+      if (chosenType.id === 'BOSS') {
+        // Sếp đứng sừng sững trên hành lang -> Bắt buộc phải CÚI (⬇️) giả vờ làm việc!
+        entityY = groundY - 48;
+      } else if (chosenType.id === 'COFFEE' || chosenType.id === 'SALARY' || chosenType.id === 'CAT') {
+        // Power-up có thể nằm ở tầm thấp hoặc tầm nhảy lên ăn
+        const heights = [groundY - 36, groundY - 115, groundY - 165];
+        entityY = heights[Math.floor(Math.random() * heights.length)];
+      } else if (chosenType.id === 'EMAIL' || chosenType.id === 'SLEEP' || chosenType.id === 'PHONE') {
+        // Chướng ngại vật nằm ở dưới đất (nhảy qua) hoặc lơ lửng tầm đầu (cúi hoặc nhảy cao qua)
+        const heights = [groundY - 34, groundY - 34, groundY - 92];
+        entityY = heights[Math.floor(Math.random() * heights.length)];
+      }
+
+      session.entities.push({
+        type: chosenType,
+        x: viewW + 90,
+        y: entityY,
+        baseY: entityY,
+        radius: chosenType.radius,
+        oscPhase: Math.random() * Math.PI * 2,
+        passedBossCheck: false,
+        triggered: false
+      });
+    }
+
+    // Thêm hiệu ứng chữ nổi (Floating Text) trên Canvas
+    function addFloatingText(text, x, y, color = '#ffffff', size = 18) {
+      if (!session) return;
+      session.floatingTexts.push({
+        text,
+        x,
+        y,
+        vy: -65,
+        alpha: 1,
+        color,
+        size
+      });
+    }
+
+    // Thêm hiệu ứng hạt nổ (Particles)
+    function spawnBurstParticles(x, y, color, count = 14, customSymbol = null) {
+      if (!session) return;
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+        const speed = 70 + Math.random() * 190;
+        session.particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 40,
+          size: 4 + Math.random() * 5,
+          color,
+          symbol: customSymbol,
+          alpha: 1,
+          life: 0.55 + Math.random() * 0.35
+        });
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 7. CẬP NHẬT LOGIC GAME MỖI FRAME (UPDATE LOOP)
+     * ============================================================================
+     */
+    function updateGame(dt) {
+      if (!session || gameState !== 'PLAYING') return;
+
+      session.elapsedTime += dt;
+      const p = session.player;
+      const eff = session.effects;
+
+      // 1. Giảm dần thời gian các hiệu ứng Buff / Debuff
+      if (eff.coffeeTimer > 0) eff.coffeeTimer = Math.max(0, eff.coffeeTimer - dt);
+      if (eff.emailSlowTimer > 0) eff.emailSlowTimer = Math.max(0, eff.emailSlowTimer - dt);
+      if (eff.confuseTimer > 0) eff.confuseTimer = Math.max(0, eff.confuseTimer - dt);
+      if (eff.sleepTimer > 0) eff.sleepTimer = Math.max(0, eff.sleepTimer - dt);
+
+      // 2. Tính toán tốc độ chạy dựa trên cấp độ thời gian & các hiệu ứng
+      session.baseSpeed = Math.min(session.maxSpeed, 390 + session.elapsedTime * 5.5);
+      let speedMultiplier = 1.0;
+
+      if (eff.bossStunTimer > 0) {
+        // Đang bị Sếp giữ lại mắng 1.5 giây -> Đứng khựng lại!
+        eff.bossStunTimer = Math.max(0, eff.bossStunTimer - dt);
+        speedMultiplier = 0.05;
+        // Deadline lao cực nhanh tới nuốt chửng trong 1.5 giây
+        session.deadlineGap -= 62 * dt;
+      } else {
+        if (eff.coffeeTimer > 0) {
+          speedMultiplier *= 1.5; // ☕ Tăng 50% tốc độ chạy
+          session.deadlineGap = Math.min(96, session.deadlineGap + 9.5 * dt); // Đẩy lùi Deadline
+        }
+        if (eff.emailSlowTimer > 0) {
+          speedMultiplier *= 0.7; // 📧 Làm chậm 30% trong 2 giây
+          session.deadlineGap -= 9.5 * dt;
+        }
+        if (eff.sleepTimer > 0) {
+          speedMultiplier *= 0.58; // 😴 Gật gù chạy chậm dần
+          session.deadlineGap -= 15.5 * dt; // Khoảng cách với Deadline thu hẹp nhanh chóng!
+        }
+        // Khi đang cúi gõ phím bình thường, tốc độ hơi chậm lại một chút trừ khi đang né Sếp
+        if (p.isDucking && !p.isJumping) {
+          sound.playKeyboardClack();
+          // Tạo ký tự code bay ra từ laptop khi cúi gõ phím
+          if (Math.random() < 0.35) {
+            const codeChars = ['0', '1', '{ }', 'KPI', 'FIX', 'OK!'];
+            const ch = codeChars[Math.floor(Math.random() * codeChars.length)];
+            session.particles.push({
+              x: p.x + 28,
+              y: p.y - 25,
+              vx: 30 + Math.random() * 60,
+              vy: -60 - Math.random() * 50,
+              size: 10,
+              color: '#38bdf8',
+              symbol: ch,
+              alpha: 1,
+              life: 0.45
+            });
+          }
+        }
+
+        // Mặc định Deadline luôn rình rập nhích lại gần nhẹ theo thời gian nếu không ăn Cà phê
+        const naturalPressure = 2.1 + Math.min(3.2, session.elapsedTime * 0.035);
+        if (eff.coffeeTimer <= 0) {
+          session.deadlineGap -= naturalPressure * dt;
+        } else {
+          // Khi hết hạn hoặc đang chạy ổn định, hồi phục nhẹ nếu không dính debuff
+        }
+        if (eff.emailSlowTimer <= 0 && eff.sleepTimer <= 0 && eff.coffeeTimer <= 0) {
+          // Nếu người chơi chạy mượt không dính chướng ngại vật, giữ khoảng cách cân bằng nhẹ
+          session.deadlineGap += 1.1 * dt;
+        }
+      }
+
+      session.deadlineGap = Math.max(0, Math.min(96, session.deadlineGap));
+      session.currentSpeed = session.baseSpeed * speedMultiplier;
+
+      // Cộng quãng đường chạy & điểm số
+      const metersDelta = (session.currentSpeed * dt) / 28;
+      session.distanceMeters += metersDelta;
+      session.totalScore = Math.floor(session.distanceMeters) + session.bonusPoints;
+
+      // 3. Tiếng bước chân & Còi báo động khi Deadline tiến lại gần
+      if (!p.isJumping && eff.bossStunTimer <= 0) {
+        sound.playFootstep(speedMultiplier);
+      }
+      if (session.deadlineGap < 38) {
+        const urgency = session.deadlineGap < 20 ? 2.0 : 1.0;
+        sound.playAlarmBeep(urgency);
+        dangerVignette.classList.add('danger-overlay-active');
+      } else {
+        dangerVignette.classList.remove('danger-overlay-active');
+      }
+
+      // Hiệu ứng rung/nhòe nhẹ khi bị Điện thoại làm xao nhãng (Confuse)
+      if (eff.confuseTimer > 0) {
+        canvas.classList.add('canvas-confused');
+        confuseWarningBox.classList.remove('hidden');
+      } else {
+        canvas.classList.remove('canvas-confused');
+        confuseWarningBox.classList.add('hidden');
+      }
+
+      // 4. Vật lý Nhảy & Cúi của Nhân vật
+      p.runAnimPhase += dt * (session.currentSpeed * 0.032);
+      if (p.isJumping) {
+        p.y += p.vy * dt;
+        p.vy += 1850 * dt; // Trọng lực
+        if (p.y >= groundY) {
+          p.y = groundY;
+          p.vy = 0;
+          p.isJumping = false;
+          p.jumpCount = 0;
+        }
+      }
+
+      // Lưu bóng mờ (Afterimage / Trail) phía sau nhân vật khi uống Cà phê ☕
+      if (eff.coffeeTimer > 0) {
+        p.afterimages.push({
+          x: p.x,
+          y: p.y,
+          isDucking: p.isDucking,
+          alpha: 0.65
+        });
+      }
+      for (let i = p.afterimages.length - 1; i >= 0; i--) {
+        p.afterimages[i].x -= session.currentSpeed * dt * 0.85;
+        p.afterimages[i].alpha -= dt * 2.4;
+        if (p.afterimages[i].alpha <= 0) {
+          p.afterimages.splice(i, 1);
+        }
+      }
+
+      // 5. Cập nhật cuộn cảnh nền Parallax văn phòng
+      const scrollDx = session.currentSpeed * dt;
+      parallax.floorTilesOffset = (parallax.floorTilesOffset + scrollDx) % 80;
+
+      parallax.cityBuildings.forEach(b => {
+        b.x -= scrollDx * 0.18;
+        if (b.x + b.w < -40) {
+          b.x = viewW + 60 + Math.random() * 80;
+        }
+      });
+
+      parallax.officeProps.forEach(prop => {
+        prop.x -= scrollDx * 0.55;
+        if (prop.x < -160) {
+          prop.x = viewW + 140 + Math.random() * 120;
+        }
+      });
+
+      parallax.ceilingLights.forEach(light => {
+        light.x -= scrollDx * 0.75;
+        if (light.x < -120) {
+          light.x = viewW + 120;
+        }
+      });
+
+      // 6. Sinh mới và di chuyển các Vật phẩm / Chướng ngại vật
+      session.spawnCooldown -= dt;
+      if (session.spawnCooldown <= 0 && eff.bossStunTimer <= 0) {
+        spawnNextEntity();
+        // Khoảng cách thời gian giữa các vật phẩm giảm nhẹ khi tốc độ tăng
+        const minCd = Math.max(0.68, 1.15 - session.elapsedTime * 0.006);
+        session.spawnCooldown = minCd + Math.random() * 0.65;
+      }
+
+      let showBossAlert = false;
+      const playerHitboxH = p.isDucking ? p.duckHeight : p.height;
+      const playerCenterY = p.y - playerHitboxH * 0.5;
+      const playerCenterX = p.x;
+
+      for (let i = session.entities.length - 1; i >= 0; i--) {
+        const ent = session.entities[i];
+        ent.x -= scrollDx;
+        ent.oscPhase += dt * 4.5;
+
+        // Vật phẩm bay nhấp nhô nhẹ (trừ Sếp đi bộ trên mặt sàn)
+        if (ent.type.id !== 'BOSS') {
+          ent.y = ent.baseY + Math.sin(ent.oscPhase) * 6;
+        }
+
+        // Cảnh báo sớm khi Sếp đang tiến vào màn hình
+        if (ent.type.id === 'BOSS' && ent.x > p.x - 40 && ent.x < viewW + 40) {
+          showBossAlert = true;
+        }
+
+        // Kiểm tra va chạm giữa Nhân vật và Vật phẩm / Chướng ngại vật
+        const dx = Math.abs(ent.x - playerCenterX);
+        const dy = Math.abs(ent.y - playerCenterY);
+
+        if (!ent.triggered && ent.type.id === 'BOSS') {
+          // Cơ chế đặc biệt của SẾP (👨‍💼):
+          // Khi đi ngang tầm kiểm tra của Sếp (dx < 52)
+          if (dx < 52) {
+            if (p.isDucking && !p.isJumping) {
+              // Người chơi ĐANG CÚI giả vờ gõ phím điên cuồng -> Vượt qua Sếp thành công!
+              if (!ent.passedBossCheck) {
+                ent.passedBossCheck = true;
+                session.bossDodgesThisRun++;
+                session.bonusPoints += 250;
+                session.deadlineGap = Math.min(96, session.deadlineGap + 6);
+                sound.playTing('coffee');
+                addFloatingText('👨‍💼 QUA MẶT SẾP! +250 KPI', p.x, p.y - 95, '#34d399', 18);
+                spawnBurstParticles(p.x, p.y - 40, '#34d399', 12);
+              }
+            } else {
+              // KHÔNG CÚI KỊP -> Bị Sếp giữ lại mắng 1.5 giây -> Deadline đuổi kịp -> GAME OVER!
+              ent.triggered = true;
+              eff.bossStunTimer = 1.5;
+              session.lastHitReason = 'BOSS';
+              sound.playBossAngry();
+              addFloatingText('👨‍💼 "SAO CHƯA NỘP BÁO CÁO?!"', ent.x, ent.y - 85, '#ef4444', 20);
+              spawnBurstParticles(p.x, p.y - 45, '#ef4444', 20);
+            }
+          }
+        } else if (!ent.triggered && dx < (ent.radius + 22) && dy < (ent.radius + playerHitboxH * 0.45)) {
+          // Va chạm với 6 loại vật phẩm / chướng ngại vật còn lại
+          ent.triggered = true;
+          handleEntityCollision(ent);
+          session.entities.splice(i, 1);
+          continue;
+        }
+
+        // Xóa vật phẩm đã trôi qua khỏi màn hình bên trái
+        if (ent.x < -120) {
+          session.entities.splice(i, 1);
+        }
+      }
+
+      // Ẩn/hiện hộp cảnh báo Sếp đi tuần
+      if (showBossAlert || eff.confuseTimer > 0) {
+        centerAlertBanner.classList.remove('hidden');
+        centerAlertBanner.classList.add('flex');
+      } else {
+        centerAlertBanner.classList.add('hidden');
+        centerAlertBanner.classList.remove('flex');
+      }
+      if (showBossAlert) {
+        bossWarningBox.classList.remove('hidden');
+      } else {
+        bossWarningBox.classList.add('hidden');
+      }
+
+      // 7. Cập nhật Floating Texts & Particles
+      for (let i = session.floatingTexts.length - 1; i >= 0; i--) {
+        const ft = session.floatingTexts[i];
+        ft.y += ft.vy * dt;
+        ft.alpha -= dt * 0.95;
+        if (ft.alpha <= 0) session.floatingTexts.splice(i, 1);
+      }
+
+      for (let i = session.particles.length - 1; i >= 0; i--) {
+        const pt = session.particles[i];
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.life -= dt;
+        pt.alpha = Math.max(0, pt.life * 1.4);
+        if (pt.life <= 0) session.particles.splice(i, 1);
+      }
+
+      // 8. Cập nhật HUD mỗi frame
+      updateHudDisplay();
+
+      // 9. Kiểm tra điều kiện GAME OVER (Khi khoảng cách với Deadline về 0)
+      if (session.deadlineGap <= 0) {
+        triggerGameOver();
+      }
+    }
+
+    // Xử lý hiệu ứng khi chạm vào từng loại Vật phẩm / Chướng ngại vật
+    function handleEntityCollision(ent) {
+      const p = session.player;
+      const eff = session.effects;
+      const id = ent.type.id;
+
+      switch (id) {
+        case 'COFFEE':
+          // ☕ Cà phê: Tăng 50% tốc độ chạy trong 3 giây + bóng mờ Afterimage
+          eff.coffeeTimer = 3.0;
+          eff.sleepTimer = 0; // Tỉnh ngủ ngay lập tức!
+          session.deadlineGap = Math.min(96, session.deadlineGap + 10);
+          sound.playTing('coffee');
+          addFloatingText('☕ TĂNG TỐC +50% (3s)!', p.x, p.y - 85, '#34d399', 18);
+          spawnBurstParticles(ent.x, ent.y, '#10b981', 16);
+          break;
+
+        case 'SALARY':
+          // 💰 Tiền lương: Cộng ngay +500 điểm thưởng & hiệu ứng tiền bay lấp lánh ($ $ $)
+          session.bonusPoints += 500;
+          session.cash += 500;
+          sound.playTing('cash');
+          addFloatingText('💰 +$500 & +500 ĐIỂM!', p.x, p.y - 90, '#facc15', 20);
+          spawnBurstParticles(ent.x, ent.y, '#eab308', 14, '$');
+          break;
+
+        case 'CAT':
+          // 🐱 Mèo văn phòng: Tạo chiếc khiên bảo vệ đỡ 1 lần Email hoặc Cơn buồn ngủ
+          p.hasCatShield = true;
+          sound.playCatShield();
+          addFloatingText('🐱 KHIÊN HOÀNG THƯỢNG!', p.x, p.y - 85, '#38bdf8', 18);
+          spawnBurstParticles(ent.x, ent.y, '#38bdf8', 15);
+          break;
+
+        case 'EMAIL':
+          // 📧 Email dồn dập: Nếu có Khiên Mèo thì đỡ được 1 lần!
+          if (p.hasCatShield) {
+            p.hasCatShield = false;
+            sound.playCatShield();
+            addFloatingText('🐱🛡️ MÈO ĐỠ BÃO EMAIL!', p.x, p.y - 90, '#38bdf8', 18);
+            spawnBurstParticles(ent.x, ent.y, '#38bdf8', 16);
+          } else {
+            eff.emailSlowTimer = 2.0; // Làm chậm 30% trong 2 giây
+            session.deadlineGap = Math.max(0, session.deadlineGap - 14);
+            session.lastHitReason = 'EMAIL';
+            sound.playDebuff();
+            addFloatingText('📧 UNREAD +99 (-30% TỐC ĐỘ)', p.x, p.y - 85, '#fb923c', 18);
+            spawnBurstParticles(ent.x, ent.y, '#f97316', 14);
+          }
+          break;
+
+        case 'SLEEP':
+          // 😴 Cơn buồn ngủ: Nếu có Khiên Mèo thì đỡ được 1 lần!
+          if (p.hasCatShield) {
+            p.hasCatShield = false;
+            sound.playCatShield();
+            addFloatingText('🐱🛡️ MÈO ĐÁNH THỨC BẠN!', p.x, p.y - 90, '#38bdf8', 18);
+            spawnBurstParticles(ent.x, ent.y, '#38bdf8', 16);
+          } else {
+            eff.sleepTimer = 2.5; // Gật gù chậm dần & thu hẹp khoảng cách với Deadline
+            session.deadlineGap = Math.max(0, session.deadlineGap - 18);
+            session.lastHitReason = 'SLEEP';
+            sound.playDebuff();
+            addFloatingText('😴 CƠN BUỒN NGỦ ẬP TỚI! Zzz...', p.x, p.y - 85, '#a78bfa', 18);
+            spawnBurstParticles(ent.x, ent.y, '#8b5cf6', 14, 'Zzz');
+          }
+          break;
+
+        case 'PHONE':
+          // 📱 Điện thoại (TikTok/Facebook): Gây xao nhãng 2.5 giây (đảo ngược phím & nhòe nhẹ)
+          eff.confuseTimer = 2.5;
+          session.deadlineGap = Math.max(0, session.deadlineGap - 9);
+          sound.playDebuff();
+          addFloatingText('📱 XAO NHÃNG! ĐẢO PHÍM (2.5s)', p.x, p.y - 85, '#e879f9', 18);
+          spawnBurstParticles(ent.x, ent.y, '#d946ef', 15);
+          break;
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 8. CẬP NHẬT GIAO DIỆN HUD & TRẠNG THÁI HIỆU ỨNG
+     * ============================================================================
+     */
+    function updateHudDisplay() {
+      if (!session) return;
+      hudScore.textContent = session.totalScore.toLocaleString('vi-VN');
+      hudCash.textContent = session.cash.toLocaleString('vi-VN');
+      hudHighScore.textContent = Math.max(savedStats.highScore, session.totalScore).toLocaleString('vi-VN');
+
+      const gapPct = Math.round(session.deadlineGap);
+      hudDistanceLabel.textContent = `Khoảng cách: ${gapPct}%`;
+      hudDeadlineFill.style.width = `${gapPct}%`;
+
+      // Quy đổi khoảng cách (0% -> 96%) thành đồng hồ đếm ngược 00:00 -> 00:30
+      const secondsLeft = Math.ceil((session.deadlineGap / 96) * 30);
+      const secStr = String(Math.max(0, secondsLeft)).padStart(2, '0');
+      hudDeadlineTimer.textContent = `00:${secStr}`;
+
+      // Render các huy hiệu Buff/Debuff đang kích hoạt
+      const badges = [];
+      const eff = session.effects;
+      if (session.player.hasCatShield) {
+        badges.push(`<span class="px-2.5 py-0.5 rounded-full bg-sky-500/30 border border-sky-400 text-sky-200 text-xs font-bold flex items-center gap-1">🐱 Khiên Mèo: Sẵn sàng</span>`);
+      }
+      if (eff.coffeeTimer > 0) {
+        badges.push(`<span class="px-2.5 py-0.5 rounded-full bg-emerald-500/30 border border-emerald-400 text-emerald-200 text-xs font-bold">☕ Cà phê +50%: ${eff.coffeeTimer.toFixed(1)}s</span>`);
+      }
+      if (eff.emailSlowTimer > 0) {
+        badges.push(`<span class="px-2.5 py-0.5 rounded-full bg-orange-500/30 border border-orange-400 text-orange-200 text-xs font-bold">📧 Unread +99 (-30%): ${eff.emailSlowTimer.toFixed(1)}s</span>`);
+      }
+      if (eff.confuseTimer > 0) {
+        badges.push(`<span class="px-2.5 py-0.5 rounded-full bg-fuchsia-500/30 border border-fuchsia-400 text-fuchsia-200 text-xs font-bold">📱 Đảo phím TikTok: ${eff.confuseTimer.toFixed(1)}s</span>`);
+      }
+      if (eff.sleepTimer > 0) {
+        badges.push(`<span class="px-2.5 py-0.5 rounded-full bg-purple-500/30 border border-purple-400 text-purple-200 text-xs font-bold">😴 Buồn ngủ Zzz: ${eff.sleepTimer.toFixed(1)}s</span>`);
+      }
+      if (eff.bossStunTimer > 0) {
+        badges.push(`<span class="px-2.5 py-0.5 rounded-full bg-rose-600/80 border border-rose-300 text-white text-xs font-extrabold animate-pulse">👨‍💼 ĐANG BỊ SẾP MẮNG: ${eff.bossStunTimer.toFixed(1)}s</span>`);
+      }
+      activeEffectsBar.innerHTML = badges.join('');
+    }
+
+    /**
+     * ============================================================================
+     * 9. HỆ THỐNG RENDER ĐỒ HỌA 2D CANVAS (PARALLAX VĂN PHÒNG, NHÂN VẬT, DEADLINE)
+     * ============================================================================
+     */
+    function renderFrame() {
+      ctx.clearRect(0, 0, viewW, viewH);
+
+      // 1. Nền bầu trời đêm & cửa sổ kính tòa nhà văn phòng (Far Background)
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      bgGrad.addColorStop(0, '#090f1d');
+      bgGrad.addColorStop(0.55, '#111c35');
+      bgGrad.addColorStop(1, '#1e293b');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, viewW, groundY);
+
+      // Vẽ các tòa nhà chọc trời phía xa qua lớp kính văn phòng
+      parallax.cityBuildings.forEach(b => {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.fillRect(b.x, groundY - b.h - 40, b.w, b.h + 40);
+        // Cửa sổ tòa nhà phát sáng
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.14)';
+        const winW = 12;
+        const winH = 16;
+        for (let r = 0; r < 5; r++) {
+          for (let c = 0; c < b.windows; c++) {
+            ctx.fillRect(b.x + 14 + c * 24, groundY - b.h - 20 + r * 28, winW, winH);
+          }
+        }
+      });
+
+      // Khung cửa sổ kính hành lang công ty
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.35)';
+      ctx.lineWidth = 4;
+      for (let x = 0; x < viewW; x += 220) {
+        ctx.strokeRect(x, 40, 220, groundY - 80);
+      }
+
+      // 2. Đèn huỳnh quang trần nhà văn phòng
+      parallax.ceilingLights.forEach(light => {
+        ctx.save();
+        ctx.fillStyle = '#e2e8f0';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 18;
+        ctx.fillRect(light.x, 22, 95, 8);
+        // Luồng sáng chiếu xuống
+        const lightGrad = ctx.createLinearGradient(light.x, 30, light.x, 190);
+        lightGrad.addColorStop(0, 'rgba(186, 230, 253, 0.12)');
+        lightGrad.addColorStop(1, 'rgba(186, 230, 253, 0)');
+        ctx.fillStyle = lightGrad;
+        ctx.beginPath();
+        ctx.moveTo(light.x, 30);
+        ctx.lineTo(light.x + 95, 30);
+        ctx.lineTo(light.x + 135, 190);
+        ctx.lineTo(light.x - 40, 190);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // 3. Đồ nội thất văn phòng ở lớp giữa (Mid-ground Office Props)
+      parallax.officeProps.forEach(prop => {
+        drawOfficeProp(prop.x, groundY, prop.type);
+      });
+
+      // 4. Sàn gạch hành lang công ty (Foreground Floor)
+      const floorH = viewH - groundY;
+      const floorGrad = ctx.createLinearGradient(0, groundY, 0, viewH);
+      floorGrad.addColorStop(0, '#1e293b');
+      floorGrad.addColorStop(0.15, '#0f172a');
+      floorGrad.addColorStop(1, '#020617');
+      ctx.fillStyle = floorGrad;
+      ctx.fillRect(0, groundY, viewW, floorH);
+
+      // Đường kẻ gạch sàn chạy trôi tạo cảm giác tốc độ cao
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, groundY);
+      ctx.lineTo(viewW, groundY);
+      ctx.stroke();
+
+      for (let x = -parallax.floorTilesOffset; x < viewW + 80; x += 80) {
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.25)';
+        ctx.beginPath();
+        ctx.moveTo(x, groundY);
+        ctx.lineTo(x - 45, viewH);
+        ctx.stroke();
+      }
+
+      if (!session) return;
+
+      // 5. Vẽ các Vật phẩm (Power-ups) và Chướng ngại vật (Obstacles)
+      session.entities.forEach(ent => {
+        drawEntity(ent);
+      });
+
+      // 6. Vẽ bóng mờ Afterimage khi uống Cà phê ☕
+      session.player.afterimages.forEach(ghost => {
+        ctx.save();
+        ctx.globalAlpha = ghost.alpha * 0.55;
+        drawOfficeWorker(ghost.x, ghost.y, ghost.isDucking, true);
+        ctx.restore();
+      });
+
+      // 7. Vẽ Nhân vật chính (Nhân viên văn phòng ôm laptop chạy trối chết)
+      drawOfficeWorker(session.player.x, session.player.y, session.player.isDucking, false);
+
+      // 8. Vẽ ĐỒNG HỒ "DEADLINE: 00:30" NEON ĐỎ RỰC RỠ ĐUỔI THEO SAU LƯNG NHÂN VẬT
+      drawNeonDeadlineWall();
+
+      // 9. Vẽ Hạt hiệu ứng (Particles) & Chữ nổi (Floating Text)
+      session.particles.forEach(pt => {
+        ctx.save();
+        ctx.globalAlpha = pt.alpha;
+        if (pt.symbol) {
+          ctx.font = `bold ${pt.size + 8}px "JetBrains Mono", monospace`;
+          ctx.fillStyle = pt.color;
+          ctx.fillText(pt.symbol, pt.x, pt.y);
+        } else {
+          ctx.fillStyle = pt.color;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      });
+
+      session.floatingTexts.forEach(ft => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, ft.alpha);
+        ctx.font = `800 ${ft.size}px "Inter", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#020617';
+        ctx.lineWidth = 4;
+        ctx.strokeText(ft.text, ft.x, ft.y);
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      });
+    }
+
+    // Vẽ các vật dụng trang trí văn phòng (Bàn làm việc, Cây nước, Bảng KPI, Chậu cây, Máy in)
+    function drawOfficeProp(x, floorY, type) {
+      ctx.save();
+      if (type === 'DESK') {
+        // Bàn làm việc Cubicle
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(x, floorY - 58, 110, 58);
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(x - 6, floorY - 64, 122, 8);
+        // Màn hình máy tính trên bàn
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(x + 28, floorY - 96, 46, 30);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(x + 32, floorY - 92, 38, 22);
+      } else if (type === 'COOLER') {
+        // Bình nước nóng lạnh văn phòng
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(x, floorY - 72, 36, 72);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.55)';
+        ctx.beginPath();
+        ctx.roundRect(x + 4, floorY - 112, 28, 40, 8);
+        ctx.fill();
+      } else if (type === 'BOARD') {
+        // Bảng trắng biểu đồ KPI
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(x, floorY - 155, 115, 72);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(x, floorY - 155, 115, 72);
+        // Đường biểu đồ đỏ đi xuống
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x + 12, floorY - 140);
+        ctx.lineTo(x + 45, floorY - 120);
+        ctx.lineTo(x + 75, floorY - 130);
+        ctx.lineTo(x + 102, floorY - 98);
+        ctx.stroke();
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 10px Inter, sans-serif';
+        ctx.fillText('KPI THÁNG NÀY', x + 14, floorY - 142);
+      } else if (type === 'PLANT') {
+        // Chậu cây xanh công sở
+        ctx.fillStyle = '#b45309';
+        ctx.fillRect(x + 8, floorY - 32, 28, 32);
+        ctx.fillStyle = '#15803d';
+        ctx.beginPath();
+        ctx.arc(x + 22, floorY - 52, 24, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (type === 'PRINTER') {
+        // Máy photocopy
+        ctx.fillStyle = '#64748b';
+        ctx.fillRect(x, floorY - 68, 68, 68);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(x + 6, floorY - 78, 56, 10);
+      }
+      ctx.restore();
+    }
+
+    // Vẽ Nhân viên văn phòng ôm laptop chạy hoặc cúi giả vờ gõ phím
+    function drawOfficeWorker(x, y, isDucking, isGhost) {
+      const p = session.player;
+      const eff = session.effects;
+      ctx.save();
+
+      // Vẽ Khiên Mèo Bảo Vệ (🐱🛡️) nếu đang kích hoạt
+      if (!isGhost && p.hasCatShield) {
+        ctx.save();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.16)';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.arc(x, y - (isDucking ? 26 : 42), 48, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.font = '20px sans-serif';
+        ctx.fillText('🐱', x - 38, y - (isDucking ? 52 : 72));
+        ctx.restore();
+      }
+
+      // Bóng đổ dưới mặt sàn
+      if (!isGhost) {
+        const shadowScale = Math.max(0.35, 1 - (groundY - y) / 240);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.beginPath();
+        ctx.ellipse(x, groundY + 4, 28 * shadowScale, 7 * shadowScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (isDucking) {
+        // TƯ THẾ CÚI / GIẢ VỜ NGỒI BÀN GÕ BÀN PHÍM ĐIÊN CUỒNG
+        // Bàn xếp mini dã chiến hiện ra để gõ laptop
+        ctx.fillStyle = isGhost ? '#38bdf8' : '#475569';
+        ctx.fillRect(x - 24, y - 22, 56, 6);
+        ctx.fillRect(x + 18, y - 16, 6, 16);
+
+        // Thân người cúi rạp chăm chỉ
+        ctx.fillStyle = isGhost ? '#38bdf8' : '#e2e8f0'; // Áo sơ mi trắng xanh
+        ctx.beginPath();
+        ctx.roundRect(x - 24, y - 44, 36, 26, 8);
+        ctx.fill();
+
+        // Đầu nhân viên đang cắm cúi nhìn màn hình
+        ctx.fillStyle = isGhost ? '#7dd3fc' : '#fde047';
+        ctx.beginPath();
+        ctx.arc(x - 4, y - 50, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tóc công sở
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.arc(x - 6, y - 55, 13, Math.PI, Math.PI * 2);
+        ctx.fill();
+
+        // Chiếc Laptop mở sáng rực trên bàn + tay gõ liên hồi
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(x + 6, y - 28, 22, 5);
+        ctx.save();
+        ctx.translate(x + 24, y - 26);
+        ctx.rotate(-0.35);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(0, -18, 5, 18);
+        ctx.restore();
+
+        if (!isGhost) {
+          // Dòng trạng thái "Đang gõ phím chăm chỉ..."
+          ctx.font = 'bold 11px "JetBrains Mono", monospace';
+          ctx.fillStyle = '#fde047';
+          ctx.textAlign = 'center';
+          ctx.fillText('⌨️ Cạch! Cạch! Đang chạy KPI...', x + 6, y - 72);
+        }
+      } else {
+        // TƯ THẾ ĐỨNG CHẠY TRỐI CHẾT ÔM LAPTOP
+        const legSwing = p.isJumping ? 0.5 : Math.sin(p.runAnimPhase) * 0.65;
+
+        // Chân chạy
+        ctx.strokeStyle = isGhost ? '#38bdf8' : '#1e293b';
+        ctx.lineWidth = 9;
+        ctx.lineCap = 'round';
+
+        // Chân trái
+        ctx.beginPath();
+        ctx.moveTo(x - 4, y - 28);
+        ctx.lineTo(x - 4 + Math.sin(legSwing) * 20, y - 4);
+        ctx.stroke();
+
+        // Chân phải
+        ctx.beginPath();
+        ctx.moveTo(x + 4, y - 28);
+        ctx.lineTo(x + 4 - Math.sin(legSwing) * 20, y - 4);
+        ctx.stroke();
+
+        // Thân áo sơ mi công sở
+        ctx.fillStyle = isGhost ? '#38bdf8' : '#f8fafc';
+        ctx.beginPath();
+        ctx.roundRect(x - 16, y - 62, 32, 36, 8);
+        ctx.fill();
+
+        // Cà vạt đỏ bay ngược ra phía sau vì chạy quá nhanh
+        if (!isGhost) {
+          ctx.fillStyle = '#ef4444';
+          ctx.beginPath();
+          ctx.moveTo(x + 6, y - 58);
+          ctx.lineTo(x - 28 - Math.abs(Math.sin(p.runAnimPhase)) * 10, y - 52);
+          ctx.lineTo(x - 24, y - 44);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // Đầu nhân vật
+        ctx.fillStyle = isGhost ? '#7dd3fc' : '#fde68a';
+        ctx.beginPath();
+        ctx.arc(x + 2, y - 74, 15, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tóc & Biểu cảm khuôn mặt
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.arc(x, y - 79, 15, Math.PI * 0.95, Math.PI * 2.05);
+        ctx.fill();
+
+        if (!isGhost) {
+          // Mắt hoảng hốt (hoặc nhắm tịt khi dính Cơn buồn ngủ 😴)
+          ctx.fillStyle = '#0f172a';
+          if (eff.sleepTimer > 0) {
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(x + 5, y - 74);
+            ctx.lineTo(x + 13, y - 74);
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            ctx.arc(x + 9, y - 75, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // Giọt mồ hôi hột bay ra sau
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(x - 14, y - 78, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Tay ôm chặt chiếc Laptop đang mở sáng màn hình phía trước ngực
+        ctx.fillStyle = isGhost ? '#38bdf8' : '#334155';
+        ctx.fillRect(x + 10, y - 46, 22, 5);
+        ctx.save();
+        ctx.translate(x + 28, y - 44);
+        ctx.rotate(-0.28);
+        ctx.fillStyle = '#38bdf8';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(0, -18, 5, 18);
+        ctx.restore();
+      }
+
+      // Hiển thị các biểu tượng trạng thái ngay trên đầu nhân vật
+      if (!isGhost) {
+        let headOffsetY = isDucking ? y - 88 : y - 102;
+
+        // 1. Icon "📧 Unread +99" trên đầu khi dính Email
+        if (eff.emailSlowTimer > 0) {
+          ctx.save();
+          ctx.fillStyle = '#dc2626';
+          ctx.beginPath();
+          ctx.roundRect(x - 52, headOffsetY - 22, 104, 22, 6);
+          ctx.fill();
+          ctx.font = 'bold 11px "JetBrains Mono", monospace';
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText('📧 Unread +99', x, headOffsetY - 7);
+          ctx.restore();
+          headOffsetY -= 26;
+        }
+
+        // 2. Icon gật gù "😴 Zzz..." khi dính Cơn buồn ngủ
+        if (eff.sleepTimer > 0) {
+          ctx.save();
+          ctx.font = 'bold 14px "Inter", sans-serif';
+          ctx.fillStyle = '#c4b5fd';
+          ctx.textAlign = 'center';
+          ctx.fillText('😴 Gật gù... Zzz', x, headOffsetY - 6);
+          ctx.restore();
+          headOffsetY -= 22;
+        }
+
+        // 3. Icon xao nhãng "📱 Đảo phím!" khi dính Điện thoại
+        if (eff.confuseTimer > 0) {
+          ctx.save();
+          ctx.font = 'bold 12px "Inter", sans-serif';
+          ctx.fillStyle = '#f0abfc';
+          ctx.textAlign = 'center';
+          ctx.fillText('📱 Đảo phím!', x, headOffsetY - 6);
+          ctx.restore();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // Vẽ từng loại Vật phẩm hoặc Chướng ngại vật trên đường chạy
+    function drawEntity(ent) {
+      ctx.save();
+      const { x, y, type, radius } = ent;
+
+      if (type.id === 'BOSS') {
+        // Vẽ SẾP ĐI TUẦN (👨‍💼) nổi bật với vùng cảnh báo đỏ/vàng
+        ctx.save();
+        // Vùng radar kiểm tra của Sếp
+        const zoneGrad = ctx.createRadialGradient(x, y, 8, x, y, 64);
+        zoneGrad.addColorStop(0, 'rgba(239, 68, 68, 0.38)');
+        zoneGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.fillStyle = zoneGrad;
+        ctx.beginPath();
+        ctx.arc(x, y, 64, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Thân Sếp mặc vest đen lịch lãm
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.roundRect(x - 22, y - 24, 44, 68, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        // Icon Sếp lớn
+        ctx.font = '44px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('👨‍💼', x, y - 18);
+
+        // Biển nhắc nhở "ẤN CÚI (⬇️)" phía trên đầu Sếp
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.roundRect(x - 62, y - 74, 124, 24, 6);
+        ctx.fill();
+        ctx.font = '800 11px "Inter", sans-serif';
+        ctx.fillStyle = '#020617';
+        ctx.fillText('⬇️ CÚI GÕ PHÍM!', x, y - 62);
+        ctx.restore();
+      } else {
+        // Vòng hào quang (Glow Circle) phân biệt Power-up (Xanh/Vàng) và Chướng ngại vật (Đỏ/Cam/Tím)
+        ctx.save();
+        ctx.shadowColor = type.glow;
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = type.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // Emoji chính
+        ctx.font = '28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(type.emoji, x, y + 2);
+
+        // Nhãn phụ nhỏ phía trên vật phẩm
+        ctx.font = 'bold 10px "Inter", sans-serif';
+        ctx.fillStyle = type.glow;
+        ctx.textAlign = 'center';
+        ctx.fillText(type.badge, x, y - radius - 8);
+      }
+
+      ctx.restore();
+    }
+
+    // Vẽ ĐỒNG HỒ "DEADLINE: 00:30" MÀU ĐỎ RỰC RỠ PHÁT SÁNG NEON ĐUỔI THEO PHÍA SAU
+    function drawNeonDeadlineWall() {
+      const p = session.player;
+      // Vị trí X của khối Deadline dựa trên khoảng cách deadlineGap (0% = chạm vào lưng nhân vật, 96% = ở sát mép trái màn hình)
+      const maxLeftX = 18;
+      const catchX = p.x - 25;
+      const ratio = 1 - (session.deadlineGap / 96);
+      const deadlineX = maxLeftX + ratio * (catchX - maxLeftX);
+
+      // Quy đổi giây đếm ngược hiển thị trên đồng hồ Neon
+      const secondsLeft = Math.ceil((session.deadlineGap / 96) * 30);
+      const msLeft = Math.floor(((session.deadlineGap * 10) % 100));
+      const secStr = String(Math.max(0, secondsLeft)).padStart(2, '0');
+      const msStr = String(Math.max(0, msLeft)).padStart(2, '0');
+
+      ctx.save();
+
+      // 1. Bức tường sương mù năng lượng đỏ đen phía sau đồng hồ Deadline
+      const wallGrad = ctx.createLinearGradient(0, 0, deadlineX + 70, 0);
+      wallGrad.addColorStop(0, 'rgba(153, 27, 27, 0.92)');
+      wallGrad.addColorStop(0.7, 'rgba(220, 38, 38, 0.45)');
+      wallGrad.addColorStop(1, 'rgba(220, 38, 38, 0)');
+      ctx.fillStyle = wallGrad;
+      ctx.fillRect(0, 0, Math.max(0, deadlineX + 70), groundY + 15);
+
+      // 2. Khung Đồng Hồ "DEADLINE: 00:XX" phát sáng Neon ngay sau lưng nhân vật
+      const boxW = viewW < 640 ? 138 : 168;
+      const boxH = 74;
+      const boxX = Math.max(8, deadlineX - boxW * 0.45);
+      const boxY = groundY - 125 + Math.sin(session.elapsedTime * 8) * 6;
+
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 25;
+      ctx.fillStyle = 'rgba(24, 6, 12, 0.94)';
+      ctx.strokeStyle = '#ff2a2a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      // Tiêu đề "⏰ DEADLINE"
+      ctx.font = '900 12px "Inter", sans-serif';
+      ctx.fillStyle = '#fca5a5';
+      ctx.textAlign = 'center';
+      ctx.fillText('⏰ DEADLINE DỒN DẬP', boxX + boxW / 2, boxY + 22);
+
+      // Số đếm ngược Neon đỏ rực rỡ
+      ctx.font = viewW < 640 ? '800 22px "JetBrains Mono", monospace' : '800 25px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#ff4d4d';
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 18;
+      ctx.fillText(`00:${secStr}.${msStr}`, boxX + boxW / 2, boxY + 54);
+
+      // Tia sét đỏ phóng ra từ đồng hồ về phía nhân viên
+      ctx.strokeStyle = '#f87171';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(boxX + boxW, boxY + boxH / 2);
+      ctx.lineTo(boxX + boxW + 16, boxY + boxH / 2 - 8 + Math.random() * 16);
+      ctx.lineTo(boxX + boxW + 30, boxY + boxH / 2 - 12 + Math.random() * 24);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    /**
+     * ============================================================================
+     * 10. VÒNG LẶP GAME LOOP 60 FPS & QUẢN LÝ TRẠNG THÁI MÀN HÌNH
+     * ============================================================================
+     */
+    function gameLoop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const dt = Math.min(0.05, (timestamp - lastTimestamp) / 1000);
+      lastTimestamp = timestamp;
+
+      if (gameState === 'PLAYING') {
+        updateGame(dt);
+      }
+      renderFrame();
+
+      animFrameId = requestAnimationFrame(gameLoop);
+    }
+
+    // Cập nhật thống kê trên Menu Chính
+    function refreshMenuStats() {
+      menuHighScore.textContent = savedStats.highScore.toLocaleString('vi-VN');
+      menuBestCash.textContent = savedStats.bestCash.toLocaleString('vi-VN');
+      menuBossDodges.textContent = savedStats.bossDodges.toLocaleString('vi-VN');
+    }
+
+    // Bắt đầu vào ca chạy Deadline
+    function startGame() {
+      sound.init();
+      session = createNewSession();
+      gameState = 'PLAYING';
+
+      startScreen.classList.add('hidden');
+      pauseScreen.classList.add('hidden');
+      gameOverScreen.classList.add('hidden');
+      gameplayHud.classList.remove('hidden');
+      touchControls.classList.remove('hidden');
+      dangerVignette.classList.remove('danger-overlay-active');
+      canvas.classList.remove('canvas-confused');
+
+      updateHudDisplay();
+      sound.playTing('coffee');
+    }
+
+    // Tạm dừng / Tiếp tục game
+    function togglePauseGame() {
+      if (gameState === 'PLAYING') {
+        gameState = 'PAUSED';
+        pauseScreen.classList.remove('hidden');
+      } else if (gameState === 'PAUSED') {
+        gameState = 'PLAYING';
+        lastTimestamp = performance.now();
+        pauseScreen.classList.add('hidden');
+      }
+    }
+
+    // Xử lý khi Game Over
+    function triggerGameOver() {
+      gameState = 'GAMEOVER';
+      sound.playGameOver();
+      dangerVignette.classList.remove('danger-overlay-active');
+      canvas.classList.remove('canvas-confused');
+      centerAlertBanner.classList.add('hidden');
+
+      // Kiểm tra và lưu kỷ lục mới vào localStorage
+      const isNewRecord = session.totalScore > savedStats.highScore;
+      if (isNewRecord) {
+        savedStats.highScore = session.totalScore;
+        newRecordBadge.classList.remove('hidden');
+      } else {
+        newRecordBadge.classList.add('hidden');
+      }
+
+      if (session.cash > savedStats.bestCash) {
+        savedStats.bestCash = session.cash;
+      }
+      savedStats.bossDodges += session.bossDodgesThisRun;
+      saveStats(savedStats);
+
+      // Chọn thông điệp Game Over hài hước đúng theo nguyên nhân thua
+      if (session.lastHitReason === 'BOSS') {
+        gameOverEmoji.textContent = '👨‍💼💢';
+        gameOverReason.textContent = '"Sếp đã bắt quả đắng!"';
+        gameOverSubtext.textContent = 'Bạn quên nhấn Cúi (⬇️) giả vờ gõ bàn phím nên bị Sếp giữ lại giảng đạo 1.5 giây và Deadline ập tới!';
+      } else if (session.lastHitReason === 'EMAIL') {
+        gameOverEmoji.textContent = '📧💀';
+        gameOverReason.textContent = '"Email vắt kiệt sức lao động!"';
+        gameOverSubtext.textContent = 'Hộp thư +99 Unread nổ tung khiến bước chân bạn rã rời và bị đồng hồ Deadline nuốt chửng!';
+      } else if (session.lastHitReason === 'SLEEP') {
+        gameOverEmoji.textContent = '😴⏰';
+        gameOverReason.textContent = '"Bạn đã bị Deadline đè bẹp khi đang ngủ gật!"';
+        gameOverSubtext.textContent = 'Đám mây Zzz làm bạn gật gù quên lối về. Lần sau nhớ uống Cà phê phin ☕ nhé!';
+      } else {
+        gameOverEmoji.textContent = '💥⏰';
+        gameOverReason.textContent = '"Bạn đã bị Deadline đè bẹp!"';
+        gameOverSubtext.textContent = 'Đồng hồ điểm 00:00 trước khi bạn kịp đẩy code lên production!';
+      }
+
+      goScore.textContent = session.totalScore.toLocaleString('vi-VN');
+      goHighScore.textContent = savedStats.highScore.toLocaleString('vi-VN');
+      goCash.textContent = session.cash.toLocaleString('vi-VN');
+      goBossDodges.textContent = session.bossDodgesThisRun.toLocaleString('vi-VN');
+
+      gameplayHud.classList.add('hidden');
+      touchControls.classList.add('hidden');
+      gameOverScreen.classList.remove('hidden');
+    }
+
+    // Quay về Menu Chính
+    function returnToMenu() {
+      gameState = 'MENU';
+      session = createNewSession();
+      refreshMenuStats();
+
+      pauseScreen.classList.add('hidden');
+      gameOverScreen.classList.add('hidden');
+      gameplayHud.classList.add('hidden');
+      touchControls.classList.add('hidden');
+      centerAlertBanner.classList.add('hidden');
+      dangerVignette.classList.remove('danger-overlay-active');
+      canvas.classList.remove('canvas-confused');
+      startScreen.classList.remove('hidden');
+    }
+
+    // Đồng bộ nút Bật/Tắt Âm thanh
+    function syncMuteButtons() {
+      const muted = sound.isMuted;
+      document.getElementById('iconMuteHud').textContent = muted ? '🔇' : '🔊';
+      document.getElementById('iconMuteMenu').textContent = muted ? '🔇' : '🔊';
+      document.getElementById('textMuteMenu').textContent = muted ? 'Âm thanh: TẮT' : 'Âm thanh: BẬT';
+    }
+
+    /**
+     * ============================================================================
+     * 11. GẮN SỰ KIỆN BÀN PHÍM, CẢM ỨNG & CÁC NÚT GIAO DIỆN
+     * ============================================================================
+     */
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+        e.preventDefault();
+        if (gameState === 'PLAYING' && !e.repeat) {
+          handleInputJumpPress();
+        }
+      } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+        e.preventDefault();
+        if (gameState === 'PLAYING') {
+          handleInputDuckPress();
+        }
+      } else if (e.code === 'KeyP' || e.code === 'Escape') {
+        if (gameState === 'PLAYING' || gameState === 'PAUSED') {
+          togglePauseGame();
+        }
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+        handleInputJumpRelease();
+      } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+        handleInputDuckRelease();
+      }
+    });
+
+    // Nút cảm ứng Nhảy (Mobile & Mouse)
+    const btnTouchJump = document.getElementById('btnTouchJump');
+    btnTouchJump.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handleInputJumpPress();
+    });
+    btnTouchJump.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      handleInputJumpRelease();
+    });
+    btnTouchJump.addEventListener('pointerleave', () => {
+      handleInputJumpRelease();
+    });
+
+    // Nút cảm ứng Cúi / Gõ phím (Mobile & Mouse)
+    const btnTouchDuck = document.getElementById('btnTouchDuck');
+    btnTouchDuck.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handleInputDuckPress();
+    });
+    btnTouchDuck.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      handleInputDuckRelease();
+    });
+    btnTouchDuck.addEventListener('pointerleave', () => {
+      handleInputDuckRelease();
+    });
+
+    // Cho phép chạm trực tiếp lên nửa phải/trái Canvas trên điện thoại
+    canvas.addEventListener('pointerdown', (e) => {
+      if (gameState !== 'PLAYING') return;
+      if (e.clientX > viewW * 0.5) {
+        handleInputJumpPress();
+      } else {
+        handleInputDuckPress();
+      }
+    });
+    canvas.addEventListener('pointerup', () => {
+      if (gameState !== 'PLAYING') return;
+      handleInputJumpRelease();
+      handleInputDuckRelease();
+    });
+
+    // Các nút điều hướng UI
+    document.getElementById('btnStartGame').addEventListener('click', startGame);
+    document.getElementById('btnRetryGame').addEventListener('click', startGame);
+    document.getElementById('btnBackToMenu').addEventListener('click', returnToMenu);
+    document.getElementById('btnPauseHud').addEventListener('click', togglePauseGame);
+    document.getElementById('btnResumeGame').addEventListener('click', togglePauseGame);
+    document.getElementById('btnRestartFromPause').addEventListener('click', startGame);
+    document.getElementById('btnMenuFromPause').addEventListener('click', returnToMenu);
+
+    document.getElementById('btnMuteHud').addEventListener('click', () => {
+      sound.init();
+      sound.toggleMute();
+      syncMuteButtons();
+    });
+    document.getElementById('btnToggleMuteMenu').addEventListener('click', () => {
+      sound.init();
+      sound.toggleMute();
+      syncMuteButtons();
+    });
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // Khởi chạy Game khi trang tải xong
+    window.onload = () => {
+      initParallaxScene();
+      session = createNewSession();
+      refreshMenuStats();
+      resizeCanvas();
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      animFrameId = requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>

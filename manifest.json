@@ -1,0 +1,18 @@
+{
+  "name": "CHẠY KHỎI DEADLINE - Escape The Deadline",
+  "short_name": "DeadlineRun",
+  "description": "Game 2D Endless Runner sinh tồn công sở - Chạy trốn Deadline, né drama và lách qua sếp!",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b1120",
+  "theme_color": "#0b1120",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
